@@ -86,7 +86,7 @@ async def list_companies(message: types.Message):
         await message.reply(f"List of companies:\n{company_list}")
 
 
-@dp.message_handler(commands=['get_sentiments'])
+@dp.message_handler(commands=['get_list_sentiments'])
 async def get_sentiments(message: types.Message):
     global COMPANIES  # Declare the global variable to modify it
     COMPANIES = load_ticker_list()  # Load the latest ticker list from the JSON file
@@ -94,25 +94,51 @@ async def get_sentiments(message: types.Message):
     if not COMPANIES:
         await message.reply("The list of companies is empty.")
     else:
-        await analyze_sentiments()
+        await analyze_sentiments_for_companies(COMPANIES)
+
+@dp.message_handler(commands=['get_sentiment'])
+async def get_sentiment(message: types.Message):
+    symbols_arg = message.get_args()
+    symbols = [symbol.strip().upper() for symbol in symbols_arg.split(',')]
+
+    if not symbols:
+        await message.reply("Please provide at least one company symbol separated by commas.")
+    else:
+        companies = {symbol: symbol for symbol in symbols}
+        await analyze_sentiments_for_companies(companies)
+
+
+def parse_companies_input(input_str: str) -> Dict[str, str]:
+    companies = {}
+    company_pairs = input_str.split(';')
+    for pair in company_pairs:
+        pair_items = pair.split(',')
+        if len(pair_items) != 2:
+            continue
+        symbol = pair_items[0].strip().upper()
+        name = pair_items[1].strip()
+        companies[symbol] = name
+    return companies
 
 
 
 @dp.message_handler(commands=['help'])
 async def help(message: types.Message):
     message_text = ("Here are the available commands:\n\n"
-                    "/get_sentiments - Run sentiment analysis on stocks being tracked.\n\n"
+                    "/get_list_sentiments - Run sentiment analysis on stocks being tracked.\n\n"
                     "/list_companies - List all the companies currently being tracked.\n\n"
                     "/add_company <company_ticker> <company_name>- Add a company to the tracking list. Replace <company_ticker> & <company_name> with the actual stock ticker & company name.\n\n"
                     "/remove_company <company_ticker> - Remove a company from the tracking list. Replace <company_ticker> with the stock ticker.\n\n"
-                    "\nFor example:\n"
+                    "/get_sentiment <comma-separated list of comapnies> - Get sentiments for a list of companies that may or may not be in your list.\n"
+                    "Example: /get_sentiment AAPL, MSFT, TSLA\n\n"
+                    "\nOther Examples:\n"
                     "/add_company AAPL Apple\n"
                     "/remove_company APPL")
     await message.reply(message_text)
 
-def get_news_headlines():
+def get_news_headlines_for_companies(companies: Dict[str, str]):
     headlines = {}
-    for symbol, name in COMPANIES.items():
+    for symbol, name in companies.items():
         url = f"https://eodhistoricaldata.com/api/news?api_token={EOD_API_KEY}&s={symbol}.US&&limit=100"
 
         response = requests.get(url)
@@ -168,8 +194,8 @@ async def send_summary_message(sentiment_scores):
         message += f"{company}: {score}\n"
     await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
 
-async def analyze_sentiments():
-    headlines = get_news_headlines()
+async def analyze_sentiments_for_companies(companies):
+    headlines = get_news_headlines_for_companies(companies)
     sentiment_scores = {}
 
     for company, company_headlines in headlines.items():
@@ -190,6 +216,7 @@ async def analyze_sentiments():
 
     await send_summary_message(sentiment_scores)
 
+
 def today_9am_est():
     return datetime.datetime.now(pytz.timezone("US/Eastern")).replace(hour=9, minute=25, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -199,8 +226,8 @@ def yesterday_9am_est():
 async def run_scheduler():
     scheduler = AsyncIOScheduler()
 
-    # Schedule analyze_sentiments() to run from Monday to Friday at 9 AM US/Eastern
-    scheduler.add_job(lambda: asyncio.create_task(analyze_sentiments()), "cron", day_of_week="mon-fri", hour=9, minute=0, timezone="US/Eastern")
+    # Schedule analyze_sentiments_for_companies() to run from Monday to Friday at 9 AM US/Eastern
+    scheduler.add_job(lambda: asyncio.create_task(analyze_sentiments_for_companies(COMPANIES)), "cron", day_of_week="mon-fri", hour=9, minute=0, timezone="US/Eastern")
 
     # Start the scheduler
     await scheduler.start()
@@ -233,12 +260,13 @@ def save_ticker_list(companies):
 def main():
     from aiogram import executor
 
-    # Schedule analyze_sentiments() to run from Monday to Friday at 9 AM US/Eastern
+    # Schedule analyze_sentiments_for_companies() to run from Monday to Friday at 9 AM US/Eastern
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(analyze_sentiments, "cron", day_of_week="mon-fri", hour=9, minute=0, timezone="US/Eastern")
+    scheduler.add_job(lambda: asyncio.create_task(analyze_sentiments_for_companies(COMPANIES)), "cron", day_of_week="mon-fri", hour=9, minute=0, timezone="US/Eastern")
     scheduler.start()
 
     executor.start_polling(dp, on_startup=on_startup, on_shutdown=on_shutdown, skip_updates=True)
+
 
 if __name__ == '__main__':
     main()
