@@ -1,0 +1,6 @@
+aiogram
+apscheduler
+python-dotenv
+openai
+pytz
+requests
