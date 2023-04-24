@@ -48,20 +48,55 @@ async def on_shutdown(dp, scheduler):
     await bot.session.close()
 
 # Command handlers
+import requests
+
+import requests
+
+async def verify_symbol(symbol):
+    API_URL = f"https://eodhistoricaldata.com/api/news?api_token={EOD_API_KEY}&s={symbol}.US&&limit=10"
+
+    response = requests.get(API_URL)
+    data = response.json()
+
+    if data:  # Check if the response has any data (i.e., the symbol exists)
+        return True
+    return False
+
+
 @dp.message_handler(commands=['add_company'])
 async def add_company(message: types.Message):
-    args = message.get_args().split()
-    symbol = args[0].upper()
-    company_name = " ".join(args[1:])
+    input_symbols = message.get_args().replace(",", " ").split()
+    symbols = [symbol.upper() for symbol in input_symbols]
 
     COMPANIES = load_ticker_list()
 
-    if symbol in COMPANIES:
-        await message.reply(f"{symbol} already exists in the list.")
-    else:
-        COMPANIES[symbol] = company_name
-        save_ticker_list(COMPANIES)
-        await message.reply(f"Added {company_name} ({symbol}) to the list.")
+    added_symbols = []
+    existing_symbols = []
+    invalid_symbols = []
+
+    for symbol in symbols:
+        if symbol in COMPANIES:
+            existing_symbols.append(symbol)
+        else:
+            if await verify_symbol(symbol):
+                COMPANIES[symbol] = None  # No company name is stored
+                added_symbols.append(symbol)
+            else:
+                invalid_symbols.append(symbol)
+
+    save_ticker_list(COMPANIES)
+
+    response_text = ""
+    if added_symbols:
+        response_text += f"Added {', '.join(added_symbols)} to the list."
+    if existing_symbols:
+        response_text += f"\n{', '.join(existing_symbols)} already exist in the list."
+    if invalid_symbols:
+        response_text += f"\n{', '.join(invalid_symbols)} are not valid symbols."
+
+    await message.reply(response_text.strip())
+
+
 
 @dp.message_handler(commands=['remove_company'])
 async def remove_company(message: types.Message):
@@ -72,9 +107,9 @@ async def remove_company(message: types.Message):
     if symbol not in COMPANIES:
         await message.reply(f"{symbol} is not in the list.")
     else:
-        company_name = COMPANIES.pop(symbol)
+        COMPANIES.pop(symbol)
         save_ticker_list(COMPANIES)
-        await message.reply(f"Removed {company_name} ({symbol}) from the list.")
+        await message.reply(f"Removed {symbol} from the list.")
 
 @dp.message_handler(commands=['list_companies'])
 async def list_companies(message: types.Message):
@@ -82,9 +117,8 @@ async def list_companies(message: types.Message):
     if not companies:
         await message.reply("No companies in the list.")
     else:
-        company_list = "\n".join([f"{symbol}: {name}" for symbol, name in companies.items()])
+        company_list = "\n".join([f"{symbol}" for symbol in companies.keys()])
         await message.reply(f"List of companies:\n{company_list}")
-
 
 @dp.message_handler(commands=['get_list_sentiments'])
 async def get_sentiments(message: types.Message):
@@ -127,9 +161,10 @@ async def help(message: types.Message):
     message_text = ("Here are the available commands:\n\n"
                     "/get_list_sentiments - Run sentiment analysis on stocks being tracked.\n\n"
                     "/list_companies - List all the companies currently being tracked.\n\n"
-                    "/add_company <company_ticker> <company_name>- Add a company to the tracking list. Replace <company_ticker> & <company_name> with the actual stock ticker & company name.\n\n"
+                    "/add_company <company_ticker or comma-separated list of tickers> Add a company or multiple to the tracking list. Replace <company_ticker> with the actual stock ticker.\n\n"
+                    "Example: /add_company MSFT, TSLA, SBUX\n\n"
                     "/remove_company <company_ticker> - Remove a company from the tracking list. Replace <company_ticker> with the stock ticker.\n\n"
-                    "/get_sentiment <comma-separated list of comapnies> - Get sentiments for a list of companies that may or may not be in your list.\n"
+                    "/get_sentiment <comma-separated list of tickers> - Get sentiments for a list of companies that may or may not be in your list.\n"
                     "Example: /get_sentiment AAPL, MSFT, TSLA\n\n"
                     "\nOther Examples:\n"
                     "/add_company AAPL Apple\n"
@@ -138,7 +173,7 @@ async def help(message: types.Message):
 
 def get_news_headlines_for_companies(companies: Dict[str, str]):
     headlines = {}
-    for symbol, name in companies.items():
+    for symbol in companies.items():
         url = f"https://eodhistoricaldata.com/api/news?api_token={EOD_API_KEY}&s={symbol}.US&&limit=100"
 
         response = requests.get(url)
@@ -146,7 +181,7 @@ def get_news_headlines_for_companies(companies: Dict[str, str]):
         try:
             all_headlines = response.json()
         except json.JSONDecodeError:
-            print(f"Error decoding JSON for {name}: {response.content}")
+            print(f"Error decoding JSON for {symbol}: {response.content}")
             all_headlines = []
 
         est = pytz.timezone("US/Eastern")
@@ -157,7 +192,7 @@ def get_news_headlines_for_companies(companies: Dict[str, str]):
 
         filtered_headlines = [headline for headline in all_headlines if start_time <= datetime.datetime.strptime(headline["date"], "%Y-%m-%dT%H:%M:%S%z") <= end_time]
 
-        headlines[name] = filtered_headlines
+        headlines[symbol] = filtered_headlines
 
     return headlines
 
