@@ -33,6 +33,11 @@ This Telegram bot allows you to track stock sentiment for a list of companies. I
         
         `EOD_API_KEY=your_eod_historical_data_api_key OPENAI_API_KEY=your_openai_api_key TELEGRAM_BOT_TOKEN=your_telegram_bot_token TELEGRAM_CHAT_ID=your_telegram_chat_id`
         
+4. Follow these instructions to retrieve your Telegram Bot Token and Telegram Chat ID:
+
+    - `https://docs.influxdata.com/kapacitor/v1.5/event_handlers/telegram/#get-your-telegram-chat-id`
+    
+
 
 ## Usage
 
@@ -51,10 +56,11 @@ This Telegram bot allows you to track stock sentiment for a list of companies. I
 
 ## Example Commands
 
--   Add a company to the list: `/add_company AAPL Apple`
+-   Add a company(ies) to the list: `/add_company AAPL` OR `/add_company APPL, SBUX, MSFT, TSLA`
 -   Remove a company from the list: `/remove_company AAPL`
 -   List all the companies: `/list_companies`
--   Get stock sentiments: `/get_sentiments`
+-   Get stock sentiments from your list: `/get_list_sentiments`
+-   Get sentiments for a list of companies that may or may not be in your list: `/get_sentiment AAPL, SBUX, MSFT, TSLA`
 
 If you have any questions, need assistance, or want to request new features for the Stock Sentiment Analysis Telegram Bot, please feel free to open an issue on the GitHub repository or contact the bot developer.
 
