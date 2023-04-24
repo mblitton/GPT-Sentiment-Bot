@@ -173,7 +173,7 @@ async def help(message: types.Message):
 
 def get_news_headlines_for_companies(companies: Dict[str, str]):
     headlines = {}
-    for symbol in companies.items():
+    for symbol, _ in companies.items():  # Extract the symbol and ignore the company name
         url = f"https://eodhistoricaldata.com/api/news?api_token={EOD_API_KEY}&s={symbol}.US&&limit=100"
 
         response = requests.get(url)
@@ -195,6 +195,7 @@ def get_news_headlines_for_companies(companies: Dict[str, str]):
         headlines[symbol] = filtered_headlines
 
     return headlines
+
 
 def perform_sentiment_analysis(company,  headline):
     print(headline)
@@ -291,13 +292,15 @@ def save_ticker_list(companies):
 
 
 
-# Add this function to register the command handler with the bot
+async def wrapped_analyze_sentiments():
+    await analyze_sentiments_for_companies(COMPANIES)
+
 def main():
     from aiogram import executor
 
     # Schedule analyze_sentiments_for_companies() to run from Monday to Friday at 9 AM US/Eastern
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(lambda: asyncio.create_task(analyze_sentiments_for_companies(COMPANIES)), "cron", day_of_week="mon-fri", hour=9, minute=0, timezone="US/Eastern")
+    scheduler.add_job(wrapped_analyze_sentiments, "cron", day_of_week="mon-fri", hour=9, minute=0, timezone="US/Eastern")
     scheduler.start()
 
     executor.start_polling(dp, on_startup=on_startup, on_shutdown=on_shutdown, skip_updates=True)
